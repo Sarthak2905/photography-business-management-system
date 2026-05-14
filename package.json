@@ -1,0 +1,21 @@
+{
+  "name": "photography-business-management-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Luxury wedding photography business platform with public website and admin dashboard",
+  "scripts": {
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "build": "npm run build --prefix client",
+    "lint": "npm run lint --prefix client",
+    "test": "npm test --prefix server"
+  },
+  "keywords": [
+    "wedding-photography",
+    "react",
+    "express",
+    "mongodb"
+  ],
+  "author": "",
+  "license": "ISC"
+}
