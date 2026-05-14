@@ -5,6 +5,7 @@ const mongoose = require('mongoose')
 const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const multer = require('multer')
+const rateLimit = require('express-rate-limit')
 const { v2: cloudinary } = require('cloudinary')
 const nodemailer = require('nodemailer')
 
@@ -364,6 +365,123 @@ const modelMap = {
 const clone = (value) => JSON.parse(JSON.stringify(value))
 
 const normalizeMoney = (value) => Number(value || 0)
+const normalizeText = (value) => String(value || '').trim()
+const normalizeEmail = (value) => normalizeText(value).toLowerCase()
+const normalizeArray = (value) => Array.isArray(value) ? value.map((item) => normalizeText(item)).filter(Boolean) : []
+const pickFields = (payload, allowedFields) => allowedFields.reduce((accumulator, field) => {
+  if (payload[field] !== undefined) {
+    accumulator[field] = payload[field]
+  }
+  return accumulator
+}, {})
+
+const entityFieldMap = {
+  leads: ['clientName', 'phone', 'email', 'eventType', 'weddingDate', 'budget', 'advancePaid', 'remainingAmount', 'totalPackageAmount', 'status', 'location', 'message', 'notes', 'source'],
+  clients: ['clientName', 'phone', 'email', 'eventType', 'weddingDate', 'budget', 'advancePaid', 'remainingAmount', 'totalPackageAmount', 'status', 'location', 'notes'],
+  bookings: ['title', 'eventType', 'date', 'location', 'status', 'assignedTeam', 'timeline'],
+  revenue: ['clientName', 'amount', 'type', 'paymentDate', 'status', 'note'],
+  portfolio: ['title', 'category', 'location', 'imageUrl', 'description'],
+  testimonials: ['coupleName', 'quote', 'imageUrl', 'role'],
+  settings: ['studioName', 'whatsappNumber', 'email', 'instagram', 'city'],
+}
+
+const sanitizeEntityPayload = (entity, payload = {}) => {
+  const picked = pickFields(payload, entityFieldMap[entity] || [])
+
+  if (entity === 'settings') {
+    return {
+      studioName: normalizeText(picked.studioName),
+      whatsappNumber: normalizeText(picked.whatsappNumber),
+      email: normalizeEmail(picked.email),
+      instagram: normalizeText(picked.instagram),
+      city: normalizeText(picked.city),
+    }
+  }
+
+  if (entity === 'leads' || entity === 'clients') {
+    return {
+      ...picked,
+      clientName: normalizeText(picked.clientName),
+      phone: normalizeText(picked.phone),
+      email: normalizeEmail(picked.email),
+      eventType: normalizeText(picked.eventType),
+      weddingDate: picked.weddingDate,
+      budget: normalizeMoney(picked.budget),
+      advancePaid: normalizeMoney(picked.advancePaid),
+      remainingAmount: normalizeMoney(picked.remainingAmount),
+      totalPackageAmount: normalizeMoney(picked.totalPackageAmount),
+      status: normalizeText(picked.status),
+      location: normalizeText(picked.location),
+      message: normalizeText(picked.message),
+      notes: normalizeText(picked.notes),
+      source: normalizeText(picked.source),
+    }
+  }
+
+  if (entity === 'bookings') {
+    return {
+      ...picked,
+      title: normalizeText(picked.title),
+      eventType: normalizeText(picked.eventType),
+      date: picked.date,
+      location: normalizeText(picked.location),
+      status: normalizeText(picked.status),
+      assignedTeam: normalizeArray(picked.assignedTeam),
+      timeline: normalizeArray(picked.timeline),
+    }
+  }
+
+  if (entity === 'revenue') {
+    return {
+      ...picked,
+      clientName: normalizeText(picked.clientName),
+      amount: normalizeMoney(picked.amount),
+      type: normalizeText(picked.type),
+      paymentDate: picked.paymentDate,
+      status: normalizeText(picked.status),
+      note: normalizeText(picked.note),
+    }
+  }
+
+  if (entity === 'portfolio') {
+    return {
+      ...picked,
+      title: normalizeText(picked.title),
+      category: normalizeText(picked.category),
+      location: normalizeText(picked.location),
+      imageUrl: normalizeText(picked.imageUrl),
+      description: normalizeText(picked.description),
+    }
+  }
+
+  if (entity === 'testimonials') {
+    return {
+      ...picked,
+      coupleName: normalizeText(picked.coupleName),
+      quote: normalizeText(picked.quote),
+      imageUrl: normalizeText(picked.imageUrl),
+      role: normalizeText(picked.role),
+    }
+  }
+
+  return picked
+}
+
+const publicRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests. Please try again shortly.' },
+})
+
+const authenticatedRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many requests. Please try again shortly.' },
+})
 
 const computeDashboardStats = (state) => {
   const clients = state.clients || []
@@ -570,7 +688,7 @@ app.get('/api/testimonials', async (_req, res) => {
   res.json(state.testimonials)
 })
 
-app.post('/api/inquiries', async (req, res) => {
+app.post('/api/inquiries', publicRateLimiter, async (req, res) => {
   const payload = {
     clientName: req.body.name,
     phone: req.body.phone,
@@ -593,8 +711,9 @@ app.post('/api/inquiries', async (req, res) => {
   res.status(201).json({ message: 'Inquiry received successfully.', lead })
 })
 
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body
+app.post('/api/auth/login', publicRateLimiter, async (req, res) => {
+  const email = normalizeEmail(req.body.email)
+  const password = normalizeText(req.body.password)
 
   if (!email || !password) {
     return res.status(400).json({ message: 'Email and password are required.' })
@@ -622,47 +741,47 @@ app.post('/api/auth/login', async (req, res) => {
   })
 })
 
-app.get('/api/dashboard/overview', authenticate, async (_req, res) => {
+app.get('/api/dashboard/overview', authenticate, authenticatedRateLimiter, async (_req, res) => {
   const state = await getState()
   res.json(computeDashboardStats(state))
 })
 
-app.get('/api/settings', authenticate, async (_req, res) => {
+app.get('/api/settings', authenticate, authenticatedRateLimiter, async (_req, res) => {
   const state = await getState()
   res.json(state.settings)
 })
 
-app.put('/api/settings', authenticate, async (req, res) => {
-  const settings = await updateItem('settings', 'singleton', req.body)
+app.put('/api/settings', authenticate, authenticatedRateLimiter, async (req, res) => {
+  const settings = await updateItem('settings', 'singleton', sanitizeEntityPayload('settings', req.body))
   res.json(settings)
 })
 
 for (const entity of ['leads', 'clients', 'bookings', 'revenue', 'portfolio', 'testimonials']) {
-  app.get(`/api/${entity}`, authenticate, async (_req, res) => {
+  app.get(`/api/${entity}`, authenticate, authenticatedRateLimiter, async (_req, res) => {
     const items = await listItems(entity)
     res.json(items)
   })
 
-  app.post(`/api/${entity}`, authenticate, async (req, res) => {
-    const item = await createItem(entity, req.body)
+  app.post(`/api/${entity}`, authenticate, authenticatedRateLimiter, async (req, res) => {
+    const item = await createItem(entity, sanitizeEntityPayload(entity, req.body))
     res.status(201).json(item)
   })
 
-  app.put(`/api/${entity}/:id`, authenticate, async (req, res) => {
-    const item = await updateItem(entity, req.params.id, req.body)
+  app.put(`/api/${entity}/:id`, authenticate, authenticatedRateLimiter, async (req, res) => {
+    const item = await updateItem(entity, req.params.id, sanitizeEntityPayload(entity, req.body))
     if (!item) {
       return res.status(404).json({ message: `${entity.slice(0, -1)} not found.` })
     }
     return res.json(item)
   })
 
-  app.delete(`/api/${entity}/:id`, authenticate, async (req, res) => {
+  app.delete(`/api/${entity}/:id`, authenticate, authenticatedRateLimiter, async (req, res) => {
     await deleteItem(entity, req.params.id)
     res.status(204).send()
   })
 }
 
-app.post('/api/uploads', authenticate, upload.single('file'), async (req, res) => {
+app.post('/api/uploads', authenticate, authenticatedRateLimiter, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'A file is required.' })
   }

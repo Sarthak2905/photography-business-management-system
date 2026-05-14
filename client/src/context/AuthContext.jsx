@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AuthContext } from './auth-context'
+import { AuthContext } from './authContext'
 import { demoCredentials } from '../data/mockData'
 import { loginAdmin, setAuthToken } from '../lib/api'
 
