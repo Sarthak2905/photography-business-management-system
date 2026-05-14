@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowRight,
@@ -54,7 +54,7 @@ import {
   useNavigate,
   useOutletContext,
 } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
+import { useAuth } from './context/useAuth'
 import {
   addDemoInquiry,
   demoCredentials,
@@ -530,7 +530,7 @@ const useDashboardData = () => {
   const [loading, setLoading] = useState(true)
   const [demoMode, setDemoMode] = useState(auth.demoMode)
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const [nextOverview, leads, clients, bookings, revenue, portfolio, testimonials, settings] = await Promise.all([
@@ -555,26 +555,22 @@ const useDashboardData = () => {
     } finally {
       setLoading(false)
     }
-  }
-
-  useEffect(() => {
-    refresh()
   }, [])
 
-  const persistLocal = (entity, payload, shouldDelete = false) => {
-    let nextState = readDemoState()
+  useEffect(() => {
+    void Promise.resolve().then(refresh)
+  }, [refresh])
 
+  const persistLocal = (entity, payload, shouldDelete = false) => {
     if (entity === 'settings') {
       upsertDemoEntity('settings', payload)
-      nextState = readDemoState()
     } else if (shouldDelete) {
       removeDemoEntity(entity, payload)
-      nextState = readDemoState()
     } else {
       upsertDemoEntity(entity, payload)
-      nextState = readDemoState()
     }
 
+    const nextState = readDemoState()
     writeDemoState(nextState)
     setState(nextState)
     setOverview(getDemoOverview(nextState))
@@ -667,8 +663,6 @@ const AdminShell = () => {
     document.documentElement.classList.toggle('light', !darkMode)
   }, [darkMode])
 
-  useEffect(() => setOpen(false), [location.pathname])
-
   return (
     <div className={clsx('min-h-screen', darkMode ? 'bg-slate-950 text-white' : 'bg-zinc-100 text-slate-950')}>
       <div className="mx-auto flex max-w-[1700px] gap-6 px-4 py-4 lg:px-6">
@@ -682,7 +676,7 @@ const AdminShell = () => {
           </div>
           <nav className="mt-10 space-y-2">
             {navItems.map(([label, href, Icon]) => (
-              <NavLink key={href} to={href} end={href === '/admin'} className={({ isActive }) => clsx('flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition', isActive ? 'bg-brand text-slate-950' : 'text-white/70 hover:bg-white/10 hover:text-white')}>
+              <NavLink key={href} to={href} end={href === '/admin'} onClick={() => setOpen(false)} className={({ isActive }) => clsx('flex items-center gap-3 rounded-2xl px-4 py-3 text-sm transition', isActive ? 'bg-brand text-slate-950' : 'text-white/70 hover:bg-white/10 hover:text-white')}>
                 <Icon size={18} /> {label}
               </NavLink>
             ))}
@@ -836,11 +830,12 @@ const useTableState = (items) => {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize)
 
-  useEffect(() => {
+  const updateSearch = (value) => {
+    setSearch(value)
     setPage(1)
-  }, [search])
+  }
 
-  return { search, setSearch, page, setPage, totalPages, visible, filtered }
+  return { search, setSearch: updateSearch, page, setPage, totalPages, visible, filtered }
 }
 
 const CRMPage = ({ entity, title }) => {
@@ -1237,11 +1232,13 @@ const TestimonialsManagerPage = () => {
 
 const SettingsPage = () => {
   const { state, save, demoMode } = useDashboardContext()
-  const [form, setForm] = useState(state.settings)
+  const settingsKey = JSON.stringify(state.settings)
 
-  useEffect(() => {
-    setForm(state.settings)
-  }, [state.settings])
+  return <SettingsForm key={settingsKey} initialValues={state.settings} save={save} demoMode={demoMode} />
+}
+
+const SettingsForm = ({ initialValues, save, demoMode }) => {
+  const [form, setForm] = useState(initialValues)
 
   const submit = async (event) => {
     event.preventDefault()

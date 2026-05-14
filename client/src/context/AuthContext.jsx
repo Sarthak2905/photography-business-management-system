@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { AuthContext } from './auth-context'
 import { demoCredentials } from '../data/mockData'
 import { loginAdmin, setAuthToken } from '../lib/api'
 
-const AuthContext = createContext(null)
 const STORAGE_KEY = 'lumina-admin-auth'
 
 export const AuthProvider = ({ children }) => {
@@ -47,5 +47,3 @@ export const AuthProvider = ({ children }) => {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
-
-export const useAuth = () => useContext(AuthContext)
