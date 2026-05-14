@@ -741,33 +741,33 @@ app.post('/api/auth/login', publicRateLimiter, async (req, res) => {
   })
 })
 
-app.get('/api/dashboard/overview', authenticate, authenticatedRateLimiter, async (_req, res) => {
+app.get('/api/dashboard/overview', authenticatedRateLimiter, authenticate, async (_req, res) => {
   const state = await getState()
   res.json(computeDashboardStats(state))
 })
 
-app.get('/api/settings', authenticate, authenticatedRateLimiter, async (_req, res) => {
+app.get('/api/settings', authenticatedRateLimiter, authenticate, async (_req, res) => {
   const state = await getState()
   res.json(state.settings)
 })
 
-app.put('/api/settings', authenticate, authenticatedRateLimiter, async (req, res) => {
+app.put('/api/settings', authenticatedRateLimiter, authenticate, async (req, res) => {
   const settings = await updateItem('settings', 'singleton', sanitizeEntityPayload('settings', req.body))
   res.json(settings)
 })
 
 for (const entity of ['leads', 'clients', 'bookings', 'revenue', 'portfolio', 'testimonials']) {
-  app.get(`/api/${entity}`, authenticate, authenticatedRateLimiter, async (_req, res) => {
+  app.get(`/api/${entity}`, authenticatedRateLimiter, authenticate, async (_req, res) => {
     const items = await listItems(entity)
     res.json(items)
   })
 
-  app.post(`/api/${entity}`, authenticate, authenticatedRateLimiter, async (req, res) => {
+  app.post(`/api/${entity}`, authenticatedRateLimiter, authenticate, async (req, res) => {
     const item = await createItem(entity, sanitizeEntityPayload(entity, req.body))
     res.status(201).json(item)
   })
 
-  app.put(`/api/${entity}/:id`, authenticate, authenticatedRateLimiter, async (req, res) => {
+  app.put(`/api/${entity}/:id`, authenticatedRateLimiter, authenticate, async (req, res) => {
     const item = await updateItem(entity, req.params.id, sanitizeEntityPayload(entity, req.body))
     if (!item) {
       return res.status(404).json({ message: `${entity.slice(0, -1)} not found.` })
@@ -775,13 +775,13 @@ for (const entity of ['leads', 'clients', 'bookings', 'revenue', 'portfolio', 't
     return res.json(item)
   })
 
-  app.delete(`/api/${entity}/:id`, authenticate, authenticatedRateLimiter, async (req, res) => {
+  app.delete(`/api/${entity}/:id`, authenticatedRateLimiter, authenticate, async (req, res) => {
     await deleteItem(entity, req.params.id)
     res.status(204).send()
   })
 }
 
-app.post('/api/uploads', authenticate, authenticatedRateLimiter, upload.single('file'), async (req, res) => {
+app.post('/api/uploads', authenticatedRateLimiter, authenticate, upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'A file is required.' })
   }
